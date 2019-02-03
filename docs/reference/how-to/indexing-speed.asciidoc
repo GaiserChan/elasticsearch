@@ -1,128 +1,65 @@
 [[tune-for-indexing-speed]]
-== Tune for indexing speed
+== 调整索引速度
 
 [float]
-=== Use bulk requests
+=== 使用批量请求
 
-Bulk requests will yield much better performance than single-document index
-requests. In order to know the optimal size of a bulk request, you should run
-a benchmark on a single node with a single shard. First try to index 100
-documents at once, then 200, then 400, etc. doubling the number of documents
-in a bulk request in every benchmark run. When the indexing speed starts to
-plateau then you know you reached the optimal size of a bulk request for your
-data. In case of tie, it is better to err in the direction of too few rather
-than too many documents. Beware that too large bulk requests might put the
-cluster under memory pressure when many of them are sent concurrently, so
-it is advisable to avoid going beyond a couple tens of megabytes per request
-even if larger requests seem to perform better.
+与单文档索引请求相比，批量请求的性能好得多。为了了解批量请求的最佳大小, 应在具有单个分片的单个节点上运行基准测试。首先尝试一次索引 100 个文档，然后 200 个，400 个，等等。在每次基准运行中，批量请求的文档数增加一倍。当索引速度开始平稳时，就知道你数据的批量请求已经达到最优值。在相同情况下, 最好是在文件太少的方向上犯错, 而不是文件太多。请注意, 当同时发送大量请求时, 过大的批量请求可能会使集群存在内存压力。因此, 即使较大的请求似乎性能更好, 也应避免每个请求超过几十兆字节。
 
 [float]
-=== Use multiple workers/threads to send data to Elasticsearch
+=== 使用多线程将数据发送到 Elasticsearch
 
-A single thread sending bulk requests is unlikely to be able to max out the
-indexing capacity of an Elasticsearch cluster. In order to use all resources
-of the cluster, you should send data from multiple threads or processes. In
-addition to making better use of the resources of the cluster, this should
-help reduce the cost of each fsync.
+发送批量请求的单个线程不可能最大限度地发挥 Elasticsearch 集群的索引能力。为了使用集群的所有资源，你需要使用多线程或者进程发送数据。除了更好地利用集群的资源外, 这还有助于降低每个文件同步的成本。
 
-Make sure to watch for `TOO_MANY_REQUESTS (429)` response codes
-(`EsRejectedExecutionException` with the Java client), which is the way that
-Elasticsearch tells you that it cannot keep up with the current indexing rate.
-When it happens, you should pause indexing a bit before trying again, ideally
-with randomized exponential backoff.
+务必监控 `TOO_MANY_REQUESTS (429)` 响应码（Java 客户端的 EsRejectedExecutionException）。这是 Elasticsearch 告诉你它不能跟上索引速度的方式。当它发生时, 您应该暂停索引, 然后再试一次, 理想情况下随机指数回退。
 
-Similarly to sizing bulk requests, only testing can tell what the optimal
-number of workers is. This can be tested by progressively increasing the
-number of workers until either I/O or CPU is saturated on the cluster.
+与调整批量请求的大小类似，只有测试才能判断线程的最佳数量。这可以通过逐步增加工作线程数量来进行测试, 直到 I/O 或 CPU 在集群上饱和为止。
 
 [float]
-=== Increase the refresh interval
+=== 增加刷新间隔
 
-The default <<dynamic-index-settings,`index.refresh_interval`>> is `1s`, which
-forces Elasticsearch to create a new segment every second.
-Increasing this value (to say, `30s`) will allow larger segments to flush and
-decreases future merge pressure.
+默认的 <<dynamic-index-settings,`index.refresh_interval`>> 是 1s，这强制 Elasticsearch 每秒创建一个新的段。增加这个值（例如，`30s`）将允许较大的段刷新并且减小未来合并的压力。
 
 [float]
-=== Disable refresh and replicas for initial loads
+=== 初始化时禁止刷新和创建副本
 
-If you need to load a large amount of data at once, you should disable refresh
-by setting `index.refresh_interval` to `-1` and set `index.number_of_replicas`
-to `0`. This will temporarily put your index at risk since the loss of any shard
-will cause data loss, but at the same time indexing will be faster since
-documents will be indexed only once. Once the initial loading is finished, you
-can set `index.refresh_interval` and `index.number_of_replicas` back to their
-original values.
+如果你需要一次加载大量的数据，你应该通过设置 `index.refresh_interval` 等于 `-1` 禁用刷新，并且设置 `index.number_of_replicas` 等于 `0`。这些设置将暂时使索引处于危险之中, 因为任何分片的丢失都会导致数据丢失。但是与此同时索引速度会变得更快，因为文档仅会被索引一次。一旦初始化加载完成，你可以将 `index.refresh_interval` 和 `index.number_of_replicas` 改回原始值。
 
 [float]
-=== Disable swapping
+=== 禁用swapping
 
-You should make sure that the operating system is not swapping out the java
-process by <<setup-configuration-memory,disabling swapping>>.
-
-[float]
-=== Give memory to the filesystem cache
-
-The filesystem cache will be used in order to buffer I/O operations. You should
-make sure to give at least half the memory of the machine running Elasticsearch
-to the filesystem cache.
+通过 <<setup-configuration-memory,disabling swapping>> 设置，你需要确保操作系统没有交换出 java 进程。
 
 [float]
-=== Use auto-generated ids
+=== 将内存给文件系统缓存
 
-When indexing a document that has an explicit id, Elasticsearch needs to check
-whether a document with the same id already exists within the same shard, which
-is a costly operation and gets even more costly as the index grows. By using
-auto-generated ids, Elasticsearch can skip this check, which makes indexing
-faster.
+为了缓冲区 I/O 操作会使用文件系统缓存。你需要确保运行 Elasticsearch 的机器至少将一半的内存给文件系统缓存。
 
 [float]
-=== Use faster hardware
+=== 使用自动生成的 ids
 
-If indexing is I/O bound, you should investigate giving more memory to the
-filesystem cache (see above) or buying faster drives. In particular SSD drives
-are known to perform better than spinning disks. Always use local storage,
-remote filesystems such as `NFS` or `SMB` should be avoided. Also beware of
-virtualized storage such as Amazon's `Elastic Block Storage`. Virtualized
-storage works very well with Elasticsearch, and it is appealing since it is so
-fast and simple to set up, but it is also unfortunately inherently slower on an
-ongoing basis when compared to dedicated local storage. If you put an index on
-`EBS`, be sure to use provisioned IOPS otherwise operations could be quickly
-throttled.
-
-Stripe your index across multiple SSDs by configuring a RAID 0 array. Remember
-that it will increase the risk of failure since the failure of any one SSD
-destroys the index. However this is typically the right tradeoff to make:
-optimize single shards for maximum performance, and then add replicas across
-different nodes so there's redundancy for any node failures. You can also use
-<<modules-snapshots,snapshot and restore>> to backup the index for further
-insurance.
+具有显示 id 的文档索引时，Elasticsearch 需要检查具有相同 id 的文档在同一分片中是否已存在。这是一个昂贵的操作，并随着索引的增长会消耗更大。通过使用自动生成的 ids，Elasticsearch 可以跳过这个检查，这会使得索引更快。
 
 [float]
-=== Indexing buffer size
+=== 使用更快的硬件
 
-If your node is doing only heavy indexing, be sure
-<<indexing-buffer,`indices.memory.index_buffer_size`>> is large enough to give
-at most 512 MB indexing buffer per shard doing heavy indexing (beyond that
-indexing performance does not typically improve). Elasticsearch takes that
-setting (a percentage of the java heap or an absolute byte-size), and
-uses it as a shared buffer across all active shards. Very active shards will
-naturally use this buffer more than shards that are performing lightweight
-indexing.
+如果索引时受 I/O 瓶颈，你应考虑为文件系统缓存提供更多的内存（见上面），或者购买更快的驱动器。特别地，都知道 SSD 驱动器比机械转盘驱动器有更好的性能。始终使用本地存储，应该避免例如 `NAS` 或者 `SMB` 等远程文件系统。此外虚拟存储例如亚马逊的 `Elastic Block Storage` 也要小心。虚拟化存储在 Elasticsearch 工作的很好，同时它快速和简单的设置也是具有吸引力的，但不幸的是, 与本地专用的存储相比, 它在持续的基础上本质上也是较慢的。你如果在 `EBS` 上放置索引, 请确保使用预置的 IOPS, 否则操作可能会被迅速限制。
 
-The default is `10%` which is often plenty: for example, if you give the JVM
-10GB of memory, it will give 1GB to the index buffer, which is enough to host
-two shards that are heavily indexing.
+通过配置 RAID 0 阵列, 在多个 SSD 上进行索引。注意，这将增加故障的风险，因为任何一块 SSD 损坏都会破坏索引。但是通常正确的权衡是：优化单个分片以获得最大性能，然后在不同节点之间添加分片，这样任何节点故障数据都会有冗余。你也可以使用 <<modules-snapshots,快照和恢复>>来备份索引，以获得进一步的保障。
 
 [float]
-=== Disable `_field_names`
+=== 索引缓冲区大小
 
-The <<mapping-field-names-field,`_field_names` field>> introduces some
-index-time overhead, so you might want to disable it if you never need to
-run `exists` queries.
+如果你的节点只执行重量级索引，确保你的 <<indexing-buffer,`indices.memory.index_buffer_size`>> 足够大，每个分片最多使用 512 MB 索引缓冲区执行重量级索引（超过该值索引性能通常不会提高）。Elasticsearch 使用该设置（java 堆内存的百分比或者绝对字节大小）并将其用作跨活动分片的共享缓冲区。非常活跃的分片自然比执行轻量级索引的分片使用更多的缓冲区。
+
+通常足够的默认值是 ‘10%’，例如，如果你给 JVM 10GB 的内存，将会分 1GB 给索引缓冲区。这足以承载两个重量级索引的分片。
 
 [float]
-=== Additional optimizations
+=== 禁用 `_field_names`
 
-Many of the strategies outlined in <<tune-for-disk-usage>> also
-provide an improvement in the speed of indexing.
+<<mapping-field-names field,`_field_names` 字段>> 增加了索引的时间开销，如果不需要执行 ‘exits’ 查询，你可以禁用该字段。
+
+[float]
+===  其他优化
+
+在<<调整磁盘使用>>章节概述的策略也提高了索引的速度。

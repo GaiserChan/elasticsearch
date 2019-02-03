@@ -1,80 +1,31 @@
 [[consistent-scoring]]
-=== Getting consistent scoring
+=== 获得一致评分
 
-The fact that Elasticsearch operates with shards and replicas adds challenges
-when it comes to having good scoring.
-
-[float]
-==== Scores are not reproducible
-
-Say the same user runs the same request twice in a row and documents do not come
-back in the same order both times, this is a pretty bad experience isn't it?
-Unfortunately this is something that can happen if you have replicas
-(`index.number_of_replicas` is greater than 0). The reason is that Elasticsearch
-selects the shards that the query should go to in a round-robin fashion, so it
-is quite likely if you run the same query twice in a row that it will go to
-different copies of the same shard.
-
-Now why is it a problem? Index statistics are an important part of the score.
-And these index statistics may be different across copies of the same shard
-due to deleted documents. As you may know when documents are deleted or updated,
-the old document is not immediately removed from the index, it is just marked
-as deleted and it will only be removed from disk on the next time that the
-segment this old document belongs to is merged. However for practical reasons,
-those deleted documents are taken into account for index statistics. So imagine
-that the primary shard just finished a large merge that removed lots of deleted
-documents, then it might have index statistics that are sufficiently different
-from the replica (which still have plenty of deleted documents) so that scores
-are different too.
-
-The recommended way to work around this issue is to use a string that identifies
-the user that is logged is (a user id or session id for instance) as a
-<<search-request-preference,preference>>. This ensures that all queries of a
-given user are always going to hit the same shards, so scores remain more
-consistent across queries.
-
-This work around has another benefit: when two documents have the same score,
-they will be sorted by their internal Lucene doc id (which is unrelated to the
-`_id` or `_uid`) by default. However these doc ids could be different across
-copies of the same shard. So by always hitting the same shard, we would get
-more consistent ordering of documents that have the same scores.
+事实上，在取得良好的评分方面, elasticsearch 使用分片和副本的操作增加了挑战。
 
 [float]
-==== Relevancy looks wrong
+==== 分数不可复现
 
-If you notice that two documents with the same content get different scores or
-that an exact match is not ranked first, then the issue might be related to
-sharding. By default, Elasticsearch makes each shard responsible for producing
-its own scores. However since index statistics are an important contributor to
-the scores, this only works well if shards have similar index statistics. The
-assumption is that since documents are routed evenly to shards by default, then
-index statistics should be very similar and scoring would work as expected.
-However in the event that you either:
+假设同一用户连续运行两次相同的请求，但是文档两次都不会以相同的顺序返回, 这是一次相当糟糕的体验, 不是吗？不幸的是，如果你有副本（ `index.number_of_replicas` 大于 0 ）则会发生这种情况。原因是 Elasticsearch 以轮询的方式选择查询执行的分片，如果你连续两次执行同一查询，则请求极有可能转到同一分片的不同副本。
 
- - use routing at index time,
- - query multiple _indices_,
- - or have too little data in your index
+为什么会有问题？索引统计是评分的重要组成部分。而且由于删除了文档，相同分片的跨副本索引统计结果有可能不同。如你所知，当文档更新或者删除时，旧文档不会直接从索引中删除，它只是被标记为已删除，只有在下次合并此旧文档归属的段时才会从磁盘中删除。但是由于实际原因，这些旧文档都被考虑进了索引统计。假设主分片刚刚完成了一个大型合并，删除了大量标记为已删除的文档，所以可能它的索引统计完全不同于（仍然含有大量删除文档的）副本，所以评分也不同。
 
-then there are good chances that all shards that are involved in the search
-request do not have similar index statistics and relevancy could be bad.
+解决此问题的建议方法是使用一个字符串，该字符串标识登录的用户（例如用户 id 或者会话），并将字符串作为一个搜索 <<search-request-preference,preference>>。这样可以确保指定用户的所有查询总是命中相同的分片，因此查询之间的评分保持更一致。
 
-If you have a small dataset, the easiest way to work around this issue is to
-index everything into an index that has a single shard
-(`index.number_of_shards: 1`). Then index statistics will be the same for all
-documents and scores will be consistent.
+这种解决方案还有另一种好处：当两个文档的评分相同，他们默认地会根据内部的 Lucene 文档 id（与 `_id` 或者 `_uid` 无关）排序，相同分片副本之间的文档 id 可能会不同，所以通过命中相同的分片，对于相同评分的文档我们能够得到更多的一致性排序。
 
-Otherwise the recommended way to work around this issue is to use the
-<<dfs-query-then-fetch,`dfs_query_then_fetch`>> search type. This will make
-Elasticsearch perform an inital round trip to all involved shards, asking
-them for their index statistics relatively to the query, then the coordinating
-node will merge those statistics and send the merged statistics alongside the
-request when asking shards to perform the `query` phase, so that shards can
-use these global statistics rather than their own statistics in order to do the
-scoring.
+=== 相关性看起来有误
 
-In most cases, this additional round trip should be very cheap. However in the
-event that your query contains a very large number of fields/terms or fuzzy
-queries, beware that gathering statistics alone might not be cheap since all
-terms have to be looked up in the terms dictionaries in order to look up
-statistics.
+如果你注意到相同内容的两个文档得到不同的评分或者一个完全匹配的文档不是排第一，那么问题可能和分片有关。默认情况下，Elasticsearch 让每个分片负责产生自己的文档评分。然而由于索引统计是评分的重要部分，只有当分片具有相似的索引统计才有效。假设是默认情况下，文档均匀地路由到不同分片上，索引统计应该非常相似，文档评分符合预期效果。然而，如果你：
 
+ - 索引时使用路由，
+ - 查询多个 _indices_，
+ - 或者索引中的数据太少
+
+那么很有可能搜索请求中涉及的所有分片都没有相似的索引统计，相关性就会很差。
+
+如果你的数据集很小，解决这个问题最简单的方法是，将所有内容索引到一个单分片（`index.number_of_shards: 1`）的索引中，这样对于所有文档的索引统计都相同，评分也会一致。
+
+解决这个问题另一个建议方法是使用 <<dfs-query-then-fetch,`dfs_query_then_fetch`>> 搜索类型。这将使 Elasticsearch 对所有涉及的分片执行一次初始化的往返访问，询问它们与查询相关的索引统计，然后协调节点合并这些统计信息，并且在请求分片执行 `query` 阶段将合并后的统计信息与请求一起发送。所以分片可以使用全局统计信息而不是它们自己的统计信息，以便进行评分。
+
+多数情况下，额外的往返查询很消耗很小。然而，如果你的查询中包含大量的字段/分词或者模糊查询，注意单段收集统计数据消耗并不小，必须在分词字典中查找所有的分词才能查找统计信息。

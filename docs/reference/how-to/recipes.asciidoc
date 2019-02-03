@@ -1,11 +1,12 @@
 [[recipes]]
-== Recipes
+== 解决方案
 
-This section includes a few recipes to help with common problems:
+这部分包含一些帮助公共问题的解决方案。
+
+
 
 * <<mixing-exact-search-with-stemming>>
 * <<consistent-scoring>>
 
 include::recipes/stemming.asciidoc[]
 include::recipes/scoring.asciidoc[]
-

@@ -1,42 +1,18 @@
 [[general-recommendations]]
-== General recommendations
+== 一般建议
 
 [float]
 [[large-size]]
-=== Don't return large result sets
+=== 不要返回大的结果集
 
-Elasticsearch is designed as a search engine, which makes it very good at
-getting back the top documents that match a query. However, it is not as good
-for workloads that fall into the database domain, such as retrieving all
-documents that match a particular query. If you need to do this, make sure to
-use the <<search-request-scroll,Scroll>> API.
+Elasticsearch 被设计成一个搜索引擎，当返回对应查询的前面文档时具有很好的性能。然而，它并不适用于数据库领域的负载，例如检索与特定查询匹配的所有文档。如果你需要这样操作, 请确保使用  <<search-request-scroll,Scroll>> 接口。
 
 [float]
 [[maximum-document-size]]
-=== Avoid large documents
+=== 避免大文档
 
-Given that the default <<modules-http,`http.max_content_length`>> is set to
-100MB, Elasticsearch will refuse to index any document that is larger than
-that. You might decide to increase that particular setting, but Lucene still
-has a limit of about 2GB.
+鉴于默认 <<modules-http,`http.max_content_length`>> 设置成 100MB, Elasticsearch 会拒绝索引任何大于 100MB 的文档。你可能会决定增加该特定设置，但是 Lucene 仍然有个 2GB 左右的限制。
 
-Even without considering hard limits, large documents are usually not
-practical. Large documents put more stress on network, memory usage and disk,
-even for search requests that do not request the `_source` since Elasticsearch
-needs to fetch the `_id` of the document in all cases, and the cost of getting
-this field is bigger for large documents due to how the filesystem cache works.
-Indexing this document can use an amount of memory that is a multiplier of the
-original size of the document. Proximity search (phrase queries for instance)
-and <<search-request-highlighting,highlighting>> also become more expensive
-since their cost directly depends on the size of the original document.
+即使不考虑分片的限制，大文档通常不实际。即使是不请求 `_source` 的搜索请求，大文档也会给网络、使用内存和磁盘造成压力，因为在所有情况下，Elasticsearch 需要获取文档 `_id`。同时，由于文件系统缓存的工作方式，在大文档中获取该字段的成本更大。索引此文档使用的内存量是原始文档大小的倍数。邻近搜索（例如短语查询）和<<search-request-highlighting,高亮>>也会变得更昂贵，因为他们的成本也直接取决于原始文档的大小。
 
-It is sometimes useful to reconsider what the unit of information should be.
-For instance, the fact you want to make books searchable doesn't necesarily
-mean that a document should consist of a whole book. It might be a better idea
-to use chapters or even paragraphs as documents, and then have a property in
-these documents that identifies which book they belong to. This does not only
-avoid the issues with large documents, it also makes the search experience
-better. For instance if a user searches for two words `foo` and `bar`, a match
-across different chapters is probably very poor, while a match within the same
-paragraph is likely good.
-
+有时重新考虑信息单位应该是什么形式是有益的。例如，实际你想让一本书可以被检索并不意味着文档需要由整本书组成。用一章节甚至是一小段作为文档，然后有一个属性在这些文件中,确定他们属于哪本书或许是个好主意。这样不仅避免大文档问题，还能使搜索体验更好。例如，如果一个用户搜索两个词 `foo` 和 `bar`。不同章节之间的匹配可能非常糟糕，而同一段中的匹配可能效果很好。

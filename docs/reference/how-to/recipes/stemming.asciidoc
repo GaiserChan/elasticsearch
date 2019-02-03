@@ -1,11 +1,7 @@
 [[mixing-exact-search-with-stemming]]
-=== Mixing exact search with stemming
+=== 将精确搜索与分词混合
 
-When building a search application, stemming is often a must as it is desirable
-for a query on `skiing` to match documents that contain `ski` or `skis`. But
-what if a user wants to search for `skiing` specifically? The typical way to do
-this would be to use a <<multi-fields,multi-field>> in order to have the same
-content indexed in two different ways:
+在构建搜索应用程序时，分词通常是必须的，因为 `skiing` 查询需要匹配包含 `ski` 和 `skis` 的文档。但是用户想明确地搜索 `skiing` 呢？实现这一点的典型方法是使用 <<multi-fields,multi-field>> 以两种不同的方式索引相同的内容：
 
 [source,js]
 --------------------------------------------------
@@ -55,7 +51,7 @@ POST index/_refresh
 --------------------------------------------------
 // CONSOLE
 
-With such a setup, searching for `ski` on `body` would return both documents:
+有了这样的设置，搜索 `body` 字段的 `ski` 将会返回两个文档：
 
 [source,js]
 --------------------------------------------------
@@ -111,9 +107,7 @@ GET index/_search
 --------------------------------------------------
 // TESTRESPONSE[s/"took": 2,/"took": "$body.took",/]
 
-On the other hand, searching for `ski` on `body.exact` would only return
-document `1` since the analysis chain of `body.exact` does not perform
-stemming.
+另一方面，在 `body.exact` 字段上搜索 `ski` 将只返回文档 `1`，因为 `body.exact` 的分析链不执行分词。
 
 [source,js]
 --------------------------------------------------
@@ -160,16 +154,9 @@ GET index/_search
 --------------------------------------------------
 // TESTRESPONSE[s/"took": 1,/"took": "$body.took",/]
 
-This is not something that is easy to expose to end users, as we would need to
-have a way to figure out whether they are looking for an exact match or not and
-redirect to the appropriate field accordingly. Also what to do if only parts of
-the query need to be matched exactly while other parts should still take
-stemming into account?
+这不是容易像最终用户公开的内容，因为我们需要有种方法来确定他们是否在查找完全匹配的内容，并相应的重定向到适当的字段。另外，如果只有部分查询需要完全匹配，而其他部分仍然考虑分词，该怎么办？
 
-Fortunately, the `query_string` and `simple_query_string` queries have a feature
-that solve this exact problem: `quote_field_suffix`. This tell Elasticsearch
-that the words that appear in between quotes are to be redirected to a different
-field, see below:
+幸运的是，`query_string` 和 `simple_query_string` 查询有一个特性可以解决这个问题： `quote_field_suffix`。这告诉 Elasticsearch，引号之间出现的单词将被重定向到一个不同的字段，详见以下内容：
 
 [source,js]
 --------------------------------------------------
@@ -217,7 +204,4 @@ GET index/_search
 --------------------------------------------------
 // TESTRESPONSE[s/"took": 2,/"took": "$body.took",/]
 
-In the above case, since `ski` was in-between quotes, it was searched on the
-`body.exact` field due to the `quote_field_suffix` parameter, so only document
-`1` matched. This allows users to mix exact search with stemmed search as they
-like.
+在上面例子中，`ski` 在引号之间，由于 `quote_field_suffix` 参数，所以它能够在 `body.exact` 字段中搜索到，只有文档 `1` 匹配到。这样允许用户根据他们的喜好将精确搜索和分词搜索混合使用。

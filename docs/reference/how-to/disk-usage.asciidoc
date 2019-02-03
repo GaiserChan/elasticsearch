@@ -1,21 +1,18 @@
 [[tune-for-disk-usage]]
-== Tune for disk usage
+== 调整磁盘使用情况
 
-[float]
-=== Disable the features you do not need
 
-By default Elasticsearch indexes and adds doc values to most fields so that they
-can be searched and aggregated out of the box. For instance if you have a numeric
-field called `foo` that you need to run histograms on but that you never need to
-filter on, you can safely disable indexing on this field in your
-<<mappings,mappings>>:
+=== 禁用不必要的特性
+
+默认情况下，Elasticsearch 会对大部分的字段进行索引及追加文档值，以便这些字段能够开箱即用地被搜索和聚合。例如，你有一个名为 `foo` 的数值型字段需要在直方图上显示，但是从来不会对它进行过滤，
+这样就可以安全地在你的 <<mappings,mappings>>  里对这个字段禁用索引：
 
 [source,js]
 --------------------------------------------------
 PUT index
 {
   "mappings": {
-    "_doc": {
+    "type": {
       "properties": {
         "foo": {
           "type": "integer",
@@ -28,17 +25,14 @@ PUT index
 --------------------------------------------------
 // CONSOLE
 
-<<text,`text`>> fields store normalization factors in the index in order to be
-able to score documents. If you only need matching capabilities on a `text`
-field but do not care about the produced scores, you can configure Elasticsearch
-to not write norms to the index:
+<<text,`text`>> 字段存储了归一化因子，以便能够对文档进行评分。如果你只是在 text 字段上使用匹配功能，而不关心生成的评分，你可以修改 Elasticsearch 的配置对该字段不写入归一化因子：
 
 [source,js]
 --------------------------------------------------
 PUT index
 {
   "mappings": {
-    "_doc": {
+    "type": {
       "properties": {
         "foo": {
           "type": "text",
@@ -51,17 +45,14 @@ PUT index
 --------------------------------------------------
 // CONSOLE
 
-<<text,`text`>> fields also store frequencies and positions in the index by
-default. Frequencies are used to compute scores and positions are used to run
-phrase queries. If you do not need to run phrase queries, you can tell
-Elasticsearch to not index positions:
+<<text,`text`>> 字段同时也默认存储了它在文档中出现的频次和位置，频次用于计算文档评分，位置用于短语查询。如果你不进行短语查询，你可以告诉 Elasticsearch 不存储索引位置：
 
 [source,js]
 --------------------------------------------------
 PUT index
 {
   "mappings": {
-    "_doc": {
+    "type": {
       "properties": {
         "foo": {
           "type": "text",
@@ -74,17 +65,14 @@ PUT index
 --------------------------------------------------
 // CONSOLE
 
-Furthermore if you do not care about scoring either, you can configure
-Elasticsearch to just index matching documents for every term. You will
-still be able to search on this field, but phrase queries will raise errors
-and scoring will assume that terms appear only once in every document.
+另外，如果你也不关心评分，你可以通过如下配置 Elasticsearch 来调整每次 term 索引到的文档，你仍然能够在这个字段上搜索，但是短语查询会报错，评分也会假设该 term 在文档中只出现一次。
 
 [source,js]
 --------------------------------------------------
 PUT index
 {
   "mappings": {
-    "_doc": {
+    "type": {
       "properties": {
         "foo": {
           "type": "text",
@@ -99,26 +87,20 @@ PUT index
 // CONSOLE
 
 [float]
-=== Don't use default dynamic string mappings
+=== 不使用默认的动态字符串映射
 
-The default <<dynamic-mapping,dynamic string mappings>> will index string fields
-both as <<text,`text`>> and <<keyword,`keyword`>>. This is wasteful if you only
-need one of them. Typically an `id` field will only need to be indexed as a
-`keyword` while a `body` field will only need to be indexed as a `text` field.
+默认的  <<dynamic-mapping, 动态字符串映射>> 会将字符串字段索引为 <<text,`text`>> 和 <<keyword,`keyword`>> 。如果你只需要其中一个，这样是非常浪费的。通常情况下，`id` 字段只需要索引为 `keyword`，`body` 字段只需要索引为 `text`。
 
-This can be disabled by either configuring explicit mappings on string fields
-or setting up dynamic templates that will map string fields as either `text`
-or `keyword`.
+同样可以通过配置字符串字段的显示映射或者设置动态模板禁用动态字符串索引，这样字符串字段将被映射成 `text` 或者 `keyword`。
 
-For instance, here is a template that can be used in order to only map string
-fields as `keyword`:
+举例，下面的模板可以用作将字符串字段映射成 `keyword`:
 
 [source,js]
 --------------------------------------------------
 PUT index
 {
   "mappings": {
-    "_doc": {
+    "type": {
       "dynamic_templates": [
         {
           "strings": {
@@ -136,70 +118,53 @@ PUT index
 // CONSOLE
 
 [float]
-=== Watch your shard size
+=== 查看你的分片大小
 
-Larger shards are going to be more efficient at storing data. To increase the size of your shards, you can decrease the number of primary shards in an index by <<indices-create-index,creating indices>> with less primary shards, creating less indices (e.g. by leveraging the <<indices-rollover-index,Rollover API>>), or modifying an existing index using the <<indices-shrink-index,Shrink API>>.
+较大的分片在存储数据时更有效率。要增加分片的大小，你可以减少一个索引中主分片的数量，这可以通过 <<indices-create-index,创建索引>> 时配置较少的主分片，创建较少的索引（例如，利用 <<indices-rollover-index,Rollover API>> ）或者使用 <<indices-shrink-index,Shrink API>> 修改已经存在的索引。
 
-Keep in mind that large shard sizes come with drawbacks, such as long full recovery times.
-
-[float]
-=== Disable `_all`
-
-The <<mapping-all-field,`_all`>> field indexes the value of all fields of a
-document and can use significant space. If you never need to search against all
-fields at the same time, it can be disabled.
+要记住，分片越大，数据恢复时间越长。
 
 [float]
-=== Disable `_source`
+=== 禁用 `_all`
 
-The <<mapping-source-field,`_source`>> field stores the original JSON body of the document. If you don’t need access to it you can disable it. However, APIs that needs access to `_source` such as update and reindex won’t work.
-
-[float]
-=== Use `best_compression`
-
-The `_source` and stored fields can easily take a non negligible amount of disk
-space. They can be compressed more aggressively by using the `best_compression`
-<<index-codec,codec>>.
+<<mapping-all-field,`_all`>> 字段索引了一个文档中的所有字段值，这会占用大量的空间，如果你永远不需要同时搜索所有字段, 则可以将其禁用。
 
 [float]
-=== Force Merge
+=== 禁用 `_source`
 
-Indices in Elasticsearch are stored in one or more shards. Each shard is a Lucene index and made up of one or more segments - the actual files on disk. Larger segments are more efficient for storing data.
-
-The <<indices-forcemerge,`_forcemerge` API>> can be used to reduce the number of segments per shard. In many cases, the number of segments can be reduced to one per shard by setting `max_num_segments=1`.
+<<mapping-source-field,`_source`>> 字段存储了文档的原始 JSON 体，你如果不需要访问可以禁用它。但是，需要访问 `_source` 字段的 API （如：更新和重建索引）将不可用。
 
 [float]
-=== Shrink Index
+=== 使用 `best_compression`
 
-The <<indices-shrink-index,Shrink API>> allows you to reduce the number of shards in an index. Together with the Force Merge API above, this can significantly reduce the number of shards and segments of an index.
-
-[float]
-=== Use the smallest numeric type that is sufficient
-
-The type that you pick for <<number,numeric data>> can have a significant impact
-on disk usage. In particular, integers should be stored using an integer type
-(`byte`, `short`, `integer` or `long`) and floating points should either be
-stored in a `scaled_float` if appropriate or in the smallest type that fits the
-use-case: using `float` over `double`, or `half_float` over `float` will help
-save storage.
+`_source` 和存储的字段占用的磁盘空间不容忽视。使用 `best_compression`<<index-codec,codec>> 可以很好地压缩它们。
 
 [float]
-=== Use index sorting to colocate similar documents
+=== 强制合并
 
-When Elasticsearch stores `_source`, it compresses multiple documents at once
-in order to improve the overall compression ratio. For instance it is very
-common that documents share the same field names, and quite common that they
-share some field values, especially on fields that have a low cardinality or
-a https://en.wikipedia.org/wiki/Zipf%27s_law[zipfian] distribution.
+Elasticsearch 中的索引都是被存储在一个或者多个分片中。每个分片都是 Lucene 索引，并且由一个或者多个分段（磁盘上的真实文件）组成。大的分段在存储数据上更有效率。
 
-By default documents are compressed together in the order that they are added
-to the index. If you enabled <<index-modules-index-sorting,index sorting>>
-then instead they are compressed in sorted order. Sorting documents with similar
-structure, fields, and values together should improve the compression ratio.
+<<indices-forcemerge,`_forcemerge` 接口>>  可以用于减少每个分片上的分段数量。多数情况下, 通过设置  "max_num_segments=1", 可以将分段的数量减少到每个分片一个。
 
 [float]
-=== Put fields in the same order in documents
+=== 缩小索引
 
-Due to the fact that multiple documents are compressed together into blocks,
-it is more likely to find longer duplicate strings in those `_source` documents
-if fields always occur in the same order.
+<<indices-shrink-index,Shrink 接口>>  允许你减少索引中的分片数，同上面强制合并的接口一起，可以显著减少分片的数量和索引的分段。
+
+[float]
+=== 使用最小数字类型就足够
+
+为<<number, 数值数据>>选择的类型会对磁盘有显著影响。特别地，整数应该用整型（`byte`, `short`, `integer` 或者  `long`）存储，浮点数应该用 `scaled_float` 存储，如果合适或者在案例中使用最小类型足够，使用 "float" 代替 "double" 或者使用 "half_float" 代替 "float" 将有助于节省存储。
+
+[float]
+=== 使用索引排序查找相似的文档
+
+Elasticsearch 存储 `_source` 字段时，为了提高整体的压缩比，它会一次性压缩多个文档。例如，文档之间共用相同的字段很常见，共享字段值也相当常见，特别是某些基数很低或者 https://en.wikipedia.org/wiki/Zipf%27s_law[zipfian] 分布的字段。
+
+默认情况下，文档按照写入到索引的顺序一起压缩。如果你启用 <<index-modules-index-sorting,索引排序>>，它们将按照排序顺序进行压缩。对具有相似结构，字段和值的文档进行排序应该可以提高压缩率。
+
+[float]
+=== 在文档中以相同的顺序放置字段
+
+由于多文档是一起被压缩到磁盘块中，如果字段都是以相同顺序出现，elasticsearch 更容易在这些 ‘_source’ 文档中找到更长的重复字符串。
+
